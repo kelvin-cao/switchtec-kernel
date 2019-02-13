@@ -56,6 +56,13 @@ enum switchtec_variant {
 	SWITCHTEC_PAX,
 };
 
+enum switchtec_rel {
+	SWITCHTEC_REL_GEN3_PFX_PSX_MR4,
+	SWITCHTEC_REL_GEN3_PAX,
+	SWITCHTEC_REL_GEN4,
+	SWITCHTEC_REL_UNKNOWN,
+};
+
 struct mrpc_regs {
 	u8 input_data[SWITCHTEC_MRPC_PAYLOAD_SIZE];
 	u8 output_data[SWITCHTEC_MRPC_PAYLOAD_SIZE];
@@ -498,6 +505,7 @@ struct switchtec_dev {
 
 	enum switchtec_gen gen;
 	enum switchtec_variant var;
+	enum switchtec_rel rel;
 
 	int partition;
 	int partition_count;
