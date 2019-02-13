@@ -864,48 +864,77 @@ static u32 __iomem *pff_ev_reg(struct switchtec_dev *stdev,
 	return (void __iomem *)&stdev->mmio_pff_csr[index] + offset;
 }
 
-#define EV_GLB(i, r)[i] = {offsetof(struct sw_event_regs, r), global_ev_reg}
-#define EV_PAR(i, r)[i] = {offsetof(struct part_cfg_regs, r), part_ev_reg}
-#define EV_PFF(i, r)[i] = {offsetof(struct pff_csr_regs, r), pff_ev_reg}
+#define EV_GLB(i, r, l)[i] = {offsetof(struct sw_event_regs, r), \
+				global_ev_reg, l}
+#define EV_PAR(i, r, l)[i] = {offsetof(struct part_cfg_regs, r), \
+				part_ev_reg, l}
+#define EV_PFF(i, r, l)[i] = {offsetof(struct pff_csr_regs, r), \
+				pff_ev_reg, l}
 
 static const struct event_reg {
 	size_t offset;
 	u32 __iomem *(*map_reg)(struct switchtec_dev *stdev,
 				size_t offset, int index);
+
+	enum {
+		GEN3NM2		= BIT(SWITCHTEC_EVLIST_GEN3_NON_PAX_MR2),
+		GEN3NM3		= BIT(SWITCHTEC_EVLIST_GEN3_NON_PAX_MR3),
+		GEN3NM4		= BIT(SWITCHTEC_EVLIST_GEN3_NON_PAX_MR4),
+		ALL_GEN3N_RELS	= GEN3NM2 | GEN3NM3 | GEN3NM4 |
+				  SWITCHTEC_EVLIST_UNKNOWN,
+		GEN3AB		= BIT(SWITCHTEC_EVLIST_GEN3_PAX_BETA),
+		ALL_GEN3A_RELS	= GEN3AB | SWITCHTEC_EVLIST_UNKNOWN,
+		ALL_GEN3_RELS	= ALL_GEN3N_RELS | ALL_GEN3A_RELS,
+		GEN4NEVL1	= BIT(SWITCHTEC_EVLIST_V1),
+		ALL_GEN4_RELS	= GEN4NEVL1 | SWITCHTEC_EVLIST_UNKNOWN,
+		ALL_RELS	= ALL_GEN3_RELS | ALL_GEN4_RELS,
+	} evlist_mask;
 } event_regs[] = {
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_STACK_ERROR, stack_error_event_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_PPU_ERROR, ppu_error_event_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_ISP_ERROR, isp_error_event_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_SYS_RESET, sys_reset_event_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_EXC, fw_exception_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_NMI, fw_nmi_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_NON_FATAL, fw_non_fatal_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_FATAL, fw_fatal_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_TWI_MRPC_COMP, twi_mrpc_comp_hdr),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_STACK_ERROR, stack_error_event_hdr,
+	       ALL_RELS),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_PPU_ERROR, ppu_error_event_hdr, ALL_RELS),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_ISP_ERROR, isp_error_event_hdr,
+	       ALL_RELS & ~GEN3NM4),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_SYS_RESET, sys_reset_event_hdr, ALL_RELS),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_EXC, fw_exception_hdr, ALL_RELS),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_NMI, fw_nmi_hdr, ALL_RELS),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_NON_FATAL, fw_non_fatal_hdr,
+	       ALL_RELS),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_FATAL, fw_fatal_hdr, ALL_RELS),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_TWI_MRPC_COMP, twi_mrpc_comp_hdr,
+	       ALL_RELS),
 	EV_GLB(SWITCHTEC_IOCTL_EVENT_TWI_MRPC_COMP_ASYNC,
-	       twi_mrpc_comp_async_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_CLI_MRPC_COMP, cli_mrpc_comp_hdr),
+	       twi_mrpc_comp_async_hdr, ALL_RELS),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_CLI_MRPC_COMP, cli_mrpc_comp_hdr,
+	       ALL_RELS),
 	EV_GLB(SWITCHTEC_IOCTL_EVENT_CLI_MRPC_COMP_ASYNC,
-	       cli_mrpc_comp_async_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_GPIO_INT, gpio_interrupt_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_GFMS, gfms_event_hdr),
-	EV_PAR(SWITCHTEC_IOCTL_EVENT_PART_RESET, part_reset_hdr),
-	EV_PAR(SWITCHTEC_IOCTL_EVENT_MRPC_COMP, mrpc_comp_hdr),
-	EV_PAR(SWITCHTEC_IOCTL_EVENT_MRPC_COMP_ASYNC, mrpc_comp_async_hdr),
-	EV_PAR(SWITCHTEC_IOCTL_EVENT_DYN_PART_BIND_COMP, dyn_binding_hdr),
-	EV_PAR(SWITCHTEC_IOCTL_EVENT_INTERCOMM_REQ_NOTIFY, intercomm_notify_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_AER_IN_P2P, aer_in_p2p_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_AER_IN_VEP, aer_in_vep_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_DPC, dpc_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_CTS, cts_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_HOTPLUG, hotplug_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_IER, ier_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_THRESH, threshold_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_POWER_MGMT, power_mgmt_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_TLP_THROTTLING, tlp_throttling_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_FORCE_SPEED, force_speed_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_CREDIT_TIMEOUT, credit_timeout_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_LINK_STATE, link_state_hdr),
+	       cli_mrpc_comp_async_hdr, ALL_RELS),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_GPIO_INT, gpio_interrupt_hdr,
+	       ALL_RELS),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_GFMS, gfms_event_hdr,
+	       ALL_GEN3A_RELS),
+	EV_PAR(SWITCHTEC_IOCTL_EVENT_PART_RESET, part_reset_hdr, ALL_RELS),
+	EV_PAR(SWITCHTEC_IOCTL_EVENT_MRPC_COMP, mrpc_comp_hdr, ALL_RELS),
+	EV_PAR(SWITCHTEC_IOCTL_EVENT_MRPC_COMP_ASYNC, mrpc_comp_async_hdr,
+	       ALL_RELS),
+	EV_PAR(SWITCHTEC_IOCTL_EVENT_DYN_PART_BIND_COMP, dyn_binding_hdr,
+	       ALL_RELS),
+	EV_PAR(SWITCHTEC_IOCTL_EVENT_INTERCOMM_REQ_NOTIFY, intercomm_notify_hdr,
+	       ALL_GEN3A_RELS),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_AER_IN_P2P, aer_in_p2p_hdr, ALL_RELS),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_AER_IN_VEP, aer_in_vep_hdr, ALL_RELS & ~GEN3NM4),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_DPC, dpc_hdr, ALL_RELS),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_CTS, cts_hdr, ALL_RELS),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_HOTPLUG, hotplug_hdr, ALL_RELS),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_IER, ier_hdr, ALL_RELS),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_THRESH, threshold_hdr, ALL_RELS),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_POWER_MGMT, power_mgmt_hdr, ALL_RELS),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_TLP_THROTTLING, tlp_throttling_hdr,
+	       ALL_RELS),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_FORCE_SPEED, force_speed_hdr, ALL_RELS),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_CREDIT_TIMEOUT, credit_timeout_hdr,
+	       ALL_RELS),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_LINK_STATE, link_state_hdr, ALL_RELS),
 };
 
 static u32 __iomem *event_hdr_addr(struct switchtec_dev *stdev,
@@ -999,6 +1028,9 @@ static int ioctl_event_ctl(struct switchtec_dev *stdev,
 		return -EINVAL;
 
 	if (ctl.flags & SWITCHTEC_IOCTL_EVENT_FLAG_UNUSED)
+		return -EINVAL;
+
+	if (!(event_regs[ctl.event_id].evlist_mask & BIT(stdev->evlist)))
 		return -EINVAL;
 
 	if (ctl.index == SWITCHTEC_IOCTL_EVENT_IDX_ALL) {
@@ -1375,7 +1407,8 @@ static irqreturn_t switchtec_event_isr(int irq, void *dev)
 	check_link_state_events(stdev);
 
 	for (eid = 0; eid < SWITCHTEC_IOCTL_MAX_EVENTS; eid++)
-		event_count += mask_all_events(stdev, eid);
+		if (event_regs[eid].evlist_mask & BIT(stdev->evlist))
+			event_count += mask_all_events(stdev, eid);
 
 	if (event_count) {
 		atomic_inc(&stdev->event_cnt);
@@ -1556,6 +1589,22 @@ static const int rel_vers[] = {
 	[SWITCHTEC_GEN3_PAX_BETA] = 0x2060032,
 };
 
+static const struct evlist_meta {
+	enum switchtec_evlist evlist;
+	enum switchtec_ver_flag flag;
+	int data;
+} evlists[] = {
+	{SWITCHTEC_EVLIST_GEN3_NON_PAX_MR2, SWITCHTEC_NOT_VERSIONED,
+	 SWITCHTEC_GEN3_NON_PAX_MR2},
+	{SWITCHTEC_EVLIST_GEN3_NON_PAX_MR3, SWITCHTEC_NOT_VERSIONED,
+	 SWITCHTEC_GEN3_NON_PAX_MR3},
+	{SWITCHTEC_EVLIST_GEN3_NON_PAX_MR4, SWITCHTEC_NOT_VERSIONED,
+	 SWITCHTEC_GEN3_NON_PAX_MR4},
+	{SWITCHTEC_EVLIST_GEN3_PAX_BETA, SWITCHTEC_NOT_VERSIONED,
+	 SWITCHTEC_GEN3_PAX_BETA},
+	{SWITCHTEC_EVLIST_V1, SWITCHTEC_VERSIONED, 0x1},
+};
+
 static int get_release(struct switchtec_dev *stdev)
 {
 	int i;
@@ -1569,6 +1618,31 @@ static int get_release(struct switchtec_dev *stdev)
 	}
 
 	return SWITCHTEC_REL_UNKNOWN;
+}
+
+static int get_evlist(struct switchtec_dev *stdev)
+{
+	int i;
+	u8 evlist;
+	u32 fw_ver;
+
+	if (stdev->gen == SWITCHTEC_GEN4) {
+		evlist = ioread8(&stdev->mmio_sys_info->gen4.evlist_ver);
+		for (i = 0; i < ARRAY_SIZE(evlists); i++) {
+			if (evlists[i].flag == SWITCHTEC_VERSIONED &&
+			    evlist == evlists[i].data)
+				return evlists[i].evlist;
+		}
+	} else if (stdev->gen == SWITCHTEC_GEN3) {
+		fw_ver = ioread32(&stdev->mmio_sys_info->firmware_version);
+		for (i = 0; i < ARRAY_SIZE(evlists); i++) {
+			if (evlists[i].flag == SWITCHTEC_NOT_VERSIONED &&
+			    fw_ver == rel_vers[evlists[i].data])
+				return evlists[i].evlist;
+		}
+	}
+
+	return SWITCHTEC_EVLIST_UNKNOWN;
 }
 
 static int switchtec_pci_probe(struct pci_dev *pdev,
@@ -1591,6 +1665,7 @@ static int switchtec_pci_probe(struct pci_dev *pdev,
 		goto err_put;
 
 	stdev->rel = get_release(stdev);
+	stdev->evlist = get_evlist(stdev);
 
 	rc = switchtec_init_isr(stdev);
 	if (rc) {

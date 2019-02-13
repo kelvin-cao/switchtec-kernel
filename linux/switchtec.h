@@ -45,6 +45,11 @@ enum {
 	SWITCHTEC_GAS_PFF_CSR_OFFSET    = 0x134000,
 };
 
+enum switchtec_ver_flag {
+	SWITCHTEC_VERSIONED,
+	SWITCHTEC_NOT_VERSIONED,
+};
+
 enum switchtec_gen {
 	SWITCHTEC_GEN3,
 	SWITCHTEC_GEN4,
@@ -56,6 +61,15 @@ enum switchtec_rel {
 	SWITCHTEC_GEN3_NON_PAX_MR4,
 	SWITCHTEC_GEN3_PAX_BETA,
 	SWITCHTEC_REL_UNKNOWN,
+};
+
+enum switchtec_evlist {
+	SWITCHTEC_EVLIST_GEN3_NON_PAX_MR2,
+	SWITCHTEC_EVLIST_GEN3_NON_PAX_MR3,
+	SWITCHTEC_EVLIST_GEN3_NON_PAX_MR4,
+	SWITCHTEC_EVLIST_GEN3_PAX_BETA,
+	SWITCHTEC_EVLIST_V1,
+	SWITCHTEC_EVLIST_UNKNOWN,
 };
 
 struct mrpc_regs {
@@ -500,6 +514,7 @@ struct switchtec_dev {
 
 	enum switchtec_gen gen;
 	enum switchtec_rel rel;
+	enum switchtec_evlist evlist;
 
 	int partition;
 	int partition_count;
