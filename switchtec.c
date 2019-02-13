@@ -1549,6 +1549,28 @@ static int switchtec_init_pci(struct switchtec_dev *stdev,
 	return 0;
 }
 
+static const int rel_vers[] = {
+	[SWITCHTEC_GEN3_NON_PAX_MR2] = 0x10b0063,
+	[SWITCHTEC_GEN3_NON_PAX_MR3] = 0x10b0073,
+	[SWITCHTEC_GEN3_NON_PAX_MR4] = 0x10b0080,
+	[SWITCHTEC_GEN3_PAX_BETA] = 0x2060032,
+};
+
+static int get_release(struct switchtec_dev *stdev)
+{
+	int i;
+	u32 fw_ver;
+
+	if (stdev->gen == SWITCHTEC_GEN3) {
+		fw_ver = ioread32(&stdev->mmio_sys_info->firmware_version);
+		for (i = 0; i < ARRAY_SIZE(rel_vers); i++)
+			if (fw_ver == rel_vers[i])
+				return i;
+	}
+
+	return SWITCHTEC_REL_UNKNOWN;
+}
+
 static int switchtec_pci_probe(struct pci_dev *pdev,
 			       const struct pci_device_id *id)
 {
@@ -1567,6 +1589,8 @@ static int switchtec_pci_probe(struct pci_dev *pdev,
 	rc = switchtec_init_pci(stdev, pdev);
 	if (rc)
 		goto err_put;
+
+	stdev->rel = get_release(stdev);
 
 	rc = switchtec_init_isr(stdev);
 	if (rc) {
