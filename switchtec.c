@@ -864,48 +864,66 @@ static u32 __iomem *pff_ev_reg(struct switchtec_dev *stdev,
 	return (void __iomem *)&stdev->mmio_pff_csr[index] + offset;
 }
 
-#define EV_GLB(i, r)[i] = {offsetof(struct sw_event_regs, r), global_ev_reg}
-#define EV_PAR(i, r)[i] = {offsetof(struct part_cfg_regs, r), part_ev_reg}
-#define EV_PFF(i, r)[i] = {offsetof(struct pff_csr_regs, r), pff_ev_reg}
+#define EV_GLB(i, r, l)[i] = {offsetof(struct sw_event_regs, r), \
+				global_ev_reg, l}
+#define EV_PAR(i, r, l)[i] = {offsetof(struct part_cfg_regs, r), \
+				part_ev_reg, l}
+#define EV_PFF(i, r, l)[i] = {offsetof(struct pff_csr_regs, r), \
+				pff_ev_reg, l}
 
 static const struct event_reg {
 	size_t offset;
 	u32 __iomem *(*map_reg)(struct switchtec_dev *stdev,
 				size_t offset, int index);
+
+	enum {
+		GEN3_PNX_MR4	= BIT(SWITCHTEC_EVLIST_VER_GEN3_PFX_PSX_MR4),
+		GEN3_PAX	= BIT(SWITCHTEC_EVLIST_VER_GEN3_PAX),
+		ALL_GEN3	= GEN3_PNX_MR4 | GEN3_PAX,
+	} ver_mask;
 } event_regs[] = {
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_STACK_ERROR, stack_error_event_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_PPU_ERROR, ppu_error_event_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_ISP_ERROR, isp_error_event_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_SYS_RESET, sys_reset_event_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_EXC, fw_exception_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_NMI, fw_nmi_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_NON_FATAL, fw_non_fatal_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_FATAL, fw_fatal_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_TWI_MRPC_COMP, twi_mrpc_comp_hdr),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_STACK_ERROR, stack_error_event_hdr,
+	       ALL_GEN3),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_PPU_ERROR, ppu_error_event_hdr, ALL_GEN3),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_ISP_ERROR, isp_error_event_hdr, ALL_GEN3),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_SYS_RESET, sys_reset_event_hdr, ALL_GEN3),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_EXC, fw_exception_hdr, ALL_GEN3),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_NMI, fw_nmi_hdr, ALL_GEN3),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_NON_FATAL, fw_non_fatal_hdr,
+	       ALL_GEN3),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_FW_FATAL, fw_fatal_hdr, ALL_GEN3),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_TWI_MRPC_COMP, twi_mrpc_comp_hdr,
+	       ALL_GEN3),
 	EV_GLB(SWITCHTEC_IOCTL_EVENT_TWI_MRPC_COMP_ASYNC,
-	       twi_mrpc_comp_async_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_CLI_MRPC_COMP, cli_mrpc_comp_hdr),
+	       twi_mrpc_comp_async_hdr, ALL_GEN3),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_CLI_MRPC_COMP, cli_mrpc_comp_hdr,
+	       ALL_GEN3),
 	EV_GLB(SWITCHTEC_IOCTL_EVENT_CLI_MRPC_COMP_ASYNC,
-	       cli_mrpc_comp_async_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_GPIO_INT, gpio_interrupt_hdr),
-	EV_GLB(SWITCHTEC_IOCTL_EVENT_GFMS, gfms_event_hdr),
-	EV_PAR(SWITCHTEC_IOCTL_EVENT_PART_RESET, part_reset_hdr),
-	EV_PAR(SWITCHTEC_IOCTL_EVENT_MRPC_COMP, mrpc_comp_hdr),
-	EV_PAR(SWITCHTEC_IOCTL_EVENT_MRPC_COMP_ASYNC, mrpc_comp_async_hdr),
-	EV_PAR(SWITCHTEC_IOCTL_EVENT_DYN_PART_BIND_COMP, dyn_binding_hdr),
-	EV_PAR(SWITCHTEC_IOCTL_EVENT_INTERCOMM_REQ_NOTIFY, intercomm_notify_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_AER_IN_P2P, aer_in_p2p_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_AER_IN_VEP, aer_in_vep_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_DPC, dpc_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_CTS, cts_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_HOTPLUG, hotplug_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_IER, ier_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_THRESH, threshold_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_POWER_MGMT, power_mgmt_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_TLP_THROTTLING, tlp_throttling_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_FORCE_SPEED, force_speed_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_CREDIT_TIMEOUT, credit_timeout_hdr),
-	EV_PFF(SWITCHTEC_IOCTL_EVENT_LINK_STATE, link_state_hdr),
+	       cli_mrpc_comp_async_hdr, ALL_GEN3),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_GPIO_INT, gpio_interrupt_hdr, ALL_GEN3),
+	EV_GLB(SWITCHTEC_IOCTL_EVENT_GFMS, gfms_event_hdr, GEN3_PAX),
+	EV_PAR(SWITCHTEC_IOCTL_EVENT_PART_RESET, part_reset_hdr, ALL_GEN3),
+	EV_PAR(SWITCHTEC_IOCTL_EVENT_MRPC_COMP, mrpc_comp_hdr, ALL_GEN3),
+	EV_PAR(SWITCHTEC_IOCTL_EVENT_MRPC_COMP_ASYNC, mrpc_comp_async_hdr,
+	       ALL_GEN3),
+	EV_PAR(SWITCHTEC_IOCTL_EVENT_DYN_PART_BIND_COMP, dyn_binding_hdr,
+	       ALL_GEN3),
+	EV_PAR(SWITCHTEC_IOCTL_EVENT_INTERCOMM_REQ_NOTIFY, intercomm_notify_hdr,
+	       GEN3_PAX),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_AER_IN_P2P, aer_in_p2p_hdr, ALL_GEN3),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_AER_IN_VEP, aer_in_vep_hdr, ALL_GEN3),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_DPC, dpc_hdr, ALL_GEN3),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_CTS, cts_hdr, ALL_GEN3),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_HOTPLUG, hotplug_hdr, ALL_GEN3),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_IER, ier_hdr, ALL_GEN3),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_THRESH, threshold_hdr, ALL_GEN3),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_POWER_MGMT, power_mgmt_hdr, ALL_GEN3),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_TLP_THROTTLING, tlp_throttling_hdr,
+	       ALL_GEN3),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_FORCE_SPEED, force_speed_hdr, ALL_GEN3),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_CREDIT_TIMEOUT, credit_timeout_hdr,
+	       ALL_GEN3),
+	EV_PFF(SWITCHTEC_IOCTL_EVENT_LINK_STATE, link_state_hdr, ALL_GEN3),
 };
 
 static u32 __iomem *event_hdr_addr(struct switchtec_dev *stdev,
@@ -984,6 +1002,26 @@ static int event_ctl(struct switchtec_dev *stdev,
 	return 0;
 }
 
+static int event_supported(struct switchtec_dev *stdev, int eid, int idx)
+{
+	size_t off = event_regs[eid].offset;
+	u32 __iomem *hdr_reg;
+	u32 hdr;
+
+	if (stdev->gen == SWITCHTEC_GEN3) {
+		if (event_regs[eid].ver_mask &
+		    BIT(stdev->evlist_ver))
+			return 1;
+	} else if (stdev->gen == SWITCHTEC_GEN4) {
+		hdr_reg = event_regs[eid].map_reg(stdev, off, idx);
+		hdr = ioread32(hdr_reg);
+		if (!(hdr & SWITCHTEC_EVENT_NOT_SUPP))
+			return 1;
+	}
+
+	return 0;
+}
+
 static int ioctl_event_ctl(struct switchtec_dev *stdev,
 	struct switchtec_ioctl_event_ctl __user *uctl)
 {
@@ -999,6 +1037,9 @@ static int ioctl_event_ctl(struct switchtec_dev *stdev,
 		return -EINVAL;
 
 	if (ctl.flags & SWITCHTEC_IOCTL_EVENT_FLAG_UNUSED)
+		return -EINVAL;
+
+	if (!event_supported(stdev, ctl.event_id, ctl.index))
 		return -EINVAL;
 
 	if (ctl.index == SWITCHTEC_IOCTL_EVENT_IDX_ALL) {
@@ -1320,6 +1361,9 @@ static int mask_event(struct switchtec_dev *stdev, int eid, int idx)
 
 	hdr_reg = event_regs[eid].map_reg(stdev, off, idx);
 	hdr = ioread32(hdr_reg);
+
+	if (!event_supported(stdev, eid, idx))
+		return 0;
 
 	if (!(hdr & SWITCHTEC_EVENT_OCCURRED && hdr & SWITCHTEC_EVENT_EN_IRQ))
 		return 0;
