@@ -28,6 +28,8 @@ enum switchtec_reg_offset {
 	SWITCHTEC_DMAC_CHAN_CFG_STS_OFFSET = 0x160000,
 };
 
+#define SWITCHTEC_DESC_MAX_SIZE 0x100000
+
 struct plx_dma_desc {
 	struct dma_async_tx_descriptor txd;
 	struct plx_dma_hw_std_desc *hw;
@@ -135,6 +137,7 @@ struct chan_fw_regs {
 #define SWITCHTEC_CHAN_BURST_SZ 1
 #define SWITCHTEC_CHAN_BURST_SCALE 1
 #define SWITCHTEC_CHAN_MRRS 1
+
 struct switchtec_dma_chan {
 	struct switchtec_dma_dev *swdma_dev;
 	struct dma_chan dma_chan;
@@ -146,6 +149,7 @@ struct switchtec_dma_chan {
 	bool ring_active;
 	int head;
 	int tail;
+	int cid;
 	struct switchtec_dma_hw_se_desc *hw_sq;
 	struct switchtec_dma_hw_ce_desc *hw_cq;
 	struct switchtec_dma_desc **desc_ring;
@@ -186,15 +190,18 @@ struct switchtec_dma_hw_se_desc {
 	u8 ctrl;
 	__le16 tlp_setting;
 	__le16 rsvd1;
-	__le16 cmd_id;
+	__le16 cid;
 	__le32 byte_cnt;
-	__le32 saddrlo_widlo;
-	__le32 saddrhi_widhi;
-	__le32 daddrlo;
-	__le32 daddrhi;
+	__le32 saddr_widata_lo;
+	__le32 saddr_widata_hi;
+	__le32 daddr_lo;
+	__le32 daddr_hi;
 	__le16 dfid_connid;
 	__le16 sfid;
 };
+
+#define SWITCHTEC_SE_LIOF               BIT(14)
+#define SWITCHTEC_SE_CID_MASK           0x3f
 
 #define SWITCHTEC_CE_SC_LEN_ERR         BIT(0)
 #define SWITCHTEC_CE_SC_UR              BIT(1)
@@ -229,8 +236,16 @@ struct switchtec_dma_hw_ce_desc {
 struct switchtec_dma_desc {
 	struct dma_async_tx_descriptor txd;
 	struct switchtec_dma_hw_se_desc *hw;
+	u32 index;
 	u32 orig_size;
 };
+
+static struct switchtec_dma_desc *to_switchtec_desc(
+		struct dma_async_tx_descriptor *txd)
+{
+	return container_of(txd, struct switchtec_dma_desc, txd);
+}
+
 #define SWITCHTEC_DMA_SQ_SIZE (16 * 1024)
 #define SWITCHTEC_DMA_CQ_SIZE (16 * 1024)
 
@@ -242,15 +257,16 @@ switchtec_dma_get_desc(struct switchtec_dma_chan *swdma_chan, int i)
 	return swdma_chan->desc_ring[i & (SWITCHTEC_DMA_SQ_SIZE - 1)];
 }
 
-#if 1
 static void switchtec_dma_process_desc(struct switchtec_dma_chan *swdma_chan)
 {
 	struct dmaengine_result res;
 	struct switchtec_dma_desc *desc;
+	u16 cq_head;
 //	u32 flags;
 
 	spin_lock_bh(&swdma_chan->ring_lock);
 
+	cq_head = readw(swdma_chan->mmio_chan_hw->cq_current);
 	while (swdma_chan->tail != swdma_chan->head) {
 		desc = switchtec_dma_get_desc(swdma_chan, swdma_chan->tail);
 
@@ -279,7 +295,7 @@ static void switchtec_dma_process_desc(struct switchtec_dma_chan *swdma_chan)
 
 	spin_unlock_bh(&swdma_chan->ring_lock);
 }
-#endif
+
 static void switchtec_dma_abort_desc(struct switchtec_dma_chan *swdma_chan)
 {
 	struct dmaengine_result res;
@@ -367,7 +383,6 @@ static void switchtec_dma_desc_task(unsigned long data)
 	switchtec_dma_process_desc(swdma_chan);
 }
 
-#if 1
 static struct dma_async_tx_descriptor *switchtec_dma_prep_memcpy(struct dma_chan *c,
 		dma_addr_t dma_dst, dma_addr_t dma_src, size_t len,
 		unsigned long flags)
@@ -383,24 +398,30 @@ static struct dma_async_tx_descriptor *switchtec_dma_prep_memcpy(struct dma_chan
 	if (!CIRC_SPACE(swdma_chan->head, swdma_chan->tail, SWITCHTEC_DMA_RING_SIZE))
 		goto err_unlock;
 
-//	if (len > PLX_DESC_SIZE_MASK)
-//		goto err_unlock;
+	if (len > SWITCHTEC_DESC_MAX_SIZE)
+		goto err_unlock;
 
 	swdma_desc = switchtec_dma_get_desc(swdma_chan, swdma_chan->head);
-	swdma_chan->head++;
 
-//	plxdesc->hw->dst_addr_lo = cpu_to_le32(lower_32_bits(dma_dst));
-//	plxdesc->hw->dst_addr_hi = cpu_to_le16(upper_32_bits(dma_dst));
-//	plxdesc->hw->src_addr_lo = cpu_to_le32(lower_32_bits(dma_src));
-//	plxdesc->hw->src_addr_hi = cpu_to_le16(upper_32_bits(dma_src));
+	swdma_desc->hw->opc = SWITCHTEC_DMA_OPC_MEMCPY;
+	swdma_desc->hw->daddr_lo = cpu_to_le32(lower_32_bits(dma_dst));
+	swdma_desc->hw->daddr_hi = cpu_to_le32(lower_32_bits(dma_dst));
+	swdma_desc->hw->saddr_widata_lo = cpu_to_le32(lower_32_bits(dma_src));
+	swdma_desc->hw->saddr_widata_hi = cpu_to_le32(lower_32_bits(dma_src));
+	swdma_desc->hw->tlp_setting = 0;
+	swdma_chan->cid++;
+	swdma_chan->cid &= SWITCHTEC_SE_CID_MASK;
+	swdma_desc->hw->cid = swdma_chan->cid;
+	swdma_desc->index = swdma_chan->head;
 
 	swdma_desc->orig_size = len;
 
-//	if (flags & DMA_PREP_INTERRUPT)
-//		len |= PLX_DESC_FLAG_INT_WHEN_DONE;
+	if (flags & DMA_PREP_INTERRUPT)
+		swdma_desc->hw->ctrl |= SWITCHTEC_SE_LIOF;
 
-//	plxdesc->hw->flags_and_size = cpu_to_le32(len);
 	swdma_desc->txd.flags = flags;
+
+	swdma_chan->head++;
 
 	/* return with the lock held, it will be released in tx_submit */
 
@@ -416,30 +437,30 @@ err_unlock:
 	spin_unlock_bh(&swdma_chan->ring_lock);
 	return NULL;
 }
-#endif
+
 static dma_cookie_t switchtec_dma_tx_submit(struct dma_async_tx_descriptor *desc)
 	__releases(swdma_dev->ring_lock)
 {
 	struct switchtec_dma_chan *swdma_chan =
 		chan_to_switchtec_dma_chan(desc->chan);
-//	struct switchtec_dma_desc *swdma_desc = to_switchtec_desc(desc);
+	struct switchtec_dma_desc *swdma_desc = to_switchtec_desc(desc);
 	dma_cookie_t cookie;
 
 	cookie = dma_cookie_assign(desc);
 
-	/*
-	 * Ensure the descriptor updates are visible to the dma device
-	 * before setting the valid bit.
-	 */
-	wmb();
+//	/*
+//	 * Ensure the descriptor updates are visible to the dma device
+//	 * before setting the valid bit.
+//	 */
+//	wmb();
 
-//	plxdesc->hw->flags_and_size |= cpu_to_le32(PLX_DESC_FLAG_VALID);
+//	writew(swdma_desc->index, &swdma_chan->mmio_chan_hw->cq_head);
 
 	spin_unlock_bh(&swdma_chan->ring_lock);
 
 	return cookie;
 }
-#if 1
+
 static enum dma_status switchtec_dma_tx_status(struct dma_chan *chan,
 		dma_cookie_t cookie, struct dma_tx_state *txstate)
 {
@@ -456,7 +477,6 @@ static enum dma_status switchtec_dma_tx_status(struct dma_chan *chan,
 	return dma_cookie_status(chan, cookie, txstate);
 }
 
-#endif
 static void switchtec_dma_issue_pending(struct dma_chan *chan)
 {
 	struct switchtec_dma_chan *swdma_chan =
@@ -470,27 +490,32 @@ static void switchtec_dma_issue_pending(struct dma_chan *chan)
 	}
 
 	/*
-	 * Ensure the valid bits are visible before starting the
+	 * Ensure the desc updates are visible before starting the
 	 * DMA engine.
 	 */
 	wmb();
 
-//	writew(PLX_REG_CTRL_START_VAL, plxdev->bar + PLX_REG_CTRL);
+	/*
+	 * The sq_tail register is actually for the head of the
+	 * submisssion queue. Chip has the opposite define of head/tail
+	 * to the Linux kernel.
+	 */
+	writew(swdma_chan->head - 1, &swdma_chan->mmio_chan_hw->sq_tail);
 
 	rcu_read_unlock();
 }
-static irqreturn_t switchtec_dma_isr(int irq, void *devid)
+
+static irqreturn_t switchtec_dma_isr(int irq, void *chan)
 {
-//	struct switchtec_dma_chan *swdma_chan = devid;
-//	u32 status;
+	struct switchtec_dma_chan *swdma_chan = chan;
 
 //	status = readw(plxdev->bar + PLX_REG_INTR_STATUS);
 //
 //	if (!status)
 //		return IRQ_NONE;
 //
-//	if (status & PLX_REG_INTR_STATUS_DESC_DONE && plxdev->ring_active)
-//		tasklet_schedule(&plxdev->desc_task);
+	if (swdma_chan->ring_active)
+		tasklet_schedule(&swdma_chan->desc_task);
 //
 //	writew(status, plxdev->bar + PLX_REG_INTR_STATUS);
 
